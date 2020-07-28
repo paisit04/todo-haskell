@@ -1,12 +1,33 @@
+{-# LANGUAGE DeriveGeneric #-}
+{-# LANGUAGE OverloadedStrings #-}
+
 module Main (main) where
 
-import Options.Applicative hiding (infoParser)
+import           Control.Exception
+import           Data.Aeson hiding (Options)
+import qualified Data.ByteString.Char8 as BS
+import qualified Data.ByteString.Lazy.Char8 as BSL
+import           Data.String.Utils
+import           Data.Time
+import qualified Data.Yaml as Yaml
+import           GHC.Generics
+import           Options.Applicative hiding (infoParser)
+import           System.Directory
+import           System.IO.Error
 
 type ItemIndex = Int
 type ItemTitle = String
 type ItemDescription = Maybe String
-type ItemPriority = Maybe String
-type ItemDueBy = Maybe String
+type ItemPriority = Maybe Priority
+type ItemDueBy = Maybe LocalTime
+
+data Priority = Low | Normal | High deriving (Generic, Show)
+instance ToJSON Priority
+instance FromJSON Priority
+
+data ToDoList = ToDoList [Item] deriving (Generic, Show)
+instance ToJSON ToDoList
+instance FromJSON ToDoList
 
 data Item = Item
   {
@@ -14,7 +35,9 @@ data Item = Item
   , description :: ItemDescription
   , priority :: ItemPriority
   , dueBy :: ItemDueBy
-  } deriving Show
+  } deriving (Generic, Show)
+instance ToJSON Item
+instance FromJSON Item
 
 data ItemUpdate = ItemUpdate
   {
@@ -37,7 +60,7 @@ data Command =
   deriving Show
 
 defaultDataPath :: FilePath
-defaultDataPath = "../.to-do.yaml"
+defaultDataPath = "~/.to-do.yaml"
 
 infoParser :: Parser Command
 infoParser = pure Info
@@ -127,18 +150,44 @@ itemDescriptionValueParser :: Parser String
 itemDescriptionValueParser =
   strOption (long "desc" <> short 'd' <> metavar "DESCRIPTION" <> help "description") 
 
-itemPriorityValueParser :: Parser String
+itemPriorityValueParser :: Parser Priority
 itemPriorityValueParser =
-  strOption (long "priority" <> short 'p' <> metavar "PRIORITY" <> help "priority (1=low, 2=normal, 3=high)") 
+  option readPriority (long "priority" <> short 'p' <> metavar "PRIORITY" <> help "priority (1=low, 2=normal, 3=high)") 
+  where
+    readPriority = eitherReader $ \arg ->
+      case arg of 
+        "1" -> Right Low
+        "2" -> Right Normal
+        "3" -> Right High
+        _ -> Left $ "Invalid priority value " ++ arg 
 
-itemDueByValueParser :: Parser String
+itemDueByValueParser :: Parser LocalTime
 itemDueByValueParser =
-  strOption (long "due-by" <> short 'b' <> metavar "DUEBY" <> help "due-by date/time") 
+  option readDateTime (long "due-by" <> short 'b' <> metavar "DUEBY" <> help "due-by date/time") 
+  where
+    readDateTime = eitherReader $ \arg ->
+      case parseDateTimeMaybe arg of
+        (Just dateTime) -> Right dateTime
+        Nothing -> Left $ "Date/time string must be in " ++ dateTimeFormat ++ " format"
+    parseDateTimeMaybe = parseTimeM False defaultTimeLocale dateTimeFormat
+    dateTimeFormat = "%Y/%m/%d %H:%M:%S"
 
 main :: IO ()
 main = do
-  Options dataPath command <- execParser (info (optionsParser) (progDesc "To-do list manager"))
-  run dataPath command
+  Options dataPath command <- execParser (info (optionsParser) (progDesc "To-do list"))
+
+  homeDir <- getHomeDirectory
+  let expandedDataPath = replace "~" homeDir dataPath
+  -- run dataPath command
+
+  let dueBy = LocalTime (ModifiedJulianDay 0) (TimeOfDay 0 0 0)
+
+  writeToDoList expandedDataPath $ ToDoList
+    [ Item "title1" (Just "description1") (Just High) (Just dueBy)
+    , Item "title2" (Just "description2") (Just Normal) (Just dueBy)
+    ]
+  toDoList <- readToDoList expandedDataPath
+  print toDoList
 
 run :: FilePath -> Command -> IO ()
 run dataPath Info = putStrLn "Info"
@@ -148,3 +197,16 @@ run dataPath (Add item) = putStrLn $ "Add: item=" ++ show item
 run dataPath (View idx) = putStrLn $ "View: idx=" ++ show idx
 run dataPath (Update idx itemUpdate) = putStrLn $ "Update: idx=" ++ show idx ++ " itemUpdate=" ++ show itemUpdate
 run dataPath (Remove idx) = putStrLn $ "Remove: idx=" ++ show idx
+
+writeToDoList :: FilePath -> ToDoList -> IO ()
+writeToDoList dataPath toDoList = BS.writeFile dataPath (Yaml.encode toDoList)
+
+readToDoList :: FilePath -> IO ToDoList
+readToDoList dataPath = do
+  mbToDoList <- catchJust
+    (\e -> if isDoesNotExistError e then Just () else Nothing)
+    (BS.readFile dataPath >>= return . Yaml.decodeThrow)
+    (\_ -> return $ Just (ToDoList []))
+  case mbToDoList of
+    Nothing -> error "YAML file is corrupt"
+    Just toDoList -> return toDoList

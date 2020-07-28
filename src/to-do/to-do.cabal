@@ -16,5 +16,13 @@ executable to-do-exe
   hs-source-dirs:                 app
   main-is:                        Main.hs
   ghc-options:                    -Werror -fwarn-incomplete-patterns
-  build-depends:                  base >= 4.7 && < 5
+  build-depends:                  MissingH
+                                , aeson
+                                , base >= 4.7 && < 5
+                                , bytestring
+                                , directory
                                 , optparse-applicative
+                                , strict
+                                , text
+                                , time
+                                , yaml
