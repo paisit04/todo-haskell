@@ -7,11 +7,13 @@ import           Control.Exception
 import           Data.Aeson hiding (Options)
 import qualified Data.ByteString.Char8 as BS
 import qualified Data.ByteString.Lazy.Char8 as BSL
+import           Data.List.Safe ((!!))
 import           Data.String.Utils
 import           Data.Time
 import qualified Data.Yaml as Yaml
 import           GHC.Generics
 import           Options.Applicative hiding (infoParser)
+import           Prelude hiding ((!!))
 import           System.Directory
 import           System.IO.Error
 
@@ -178,28 +180,50 @@ main = do
 
   homeDir <- getHomeDirectory
   let expandedDataPath = replace "~" homeDir dataPath
-  -- run dataPath command
+  run expandedDataPath command
 
-  let dueBy = LocalTime (ModifiedJulianDay 0) (TimeOfDay 0 0 0)
+  -- let dueBy = LocalTime (ModifiedJulianDay 0) (TimeOfDay 0 0 0)
 
-  writeToDoList expandedDataPath $ ToDoList
-    [ Item "title1" (Just "description1") (Just High) (Just dueBy)
-    , Item "title2" (Just "description2") (Just Normal) (Just dueBy)
-    ]
-  toDoList <- readToDoList expandedDataPath
-  print toDoList
+  -- writeToDoList expandedDataPath $ ToDoList
+  --   [ Item "title1" (Just "description1") (Just High) (Just dueBy)
+  --   , Item "title2" (Just "description2") (Just Normal) (Just dueBy)
+  --   ]
+  -- toDoList <- readToDoList expandedDataPath
+  -- print toDoList
 
 run :: FilePath -> Command -> IO ()
 run dataPath Info = putStrLn "Info"
 run dataPath Init = putStrLn "Init"
 run dataPath List = putStrLn "List"
 run dataPath (Add item) = putStrLn $ "Add: item=" ++ show item
-run dataPath (View idx) = putStrLn $ "View: idx=" ++ show idx
+run dataPath (View idx) = viewItem dataPath idx
 run dataPath (Update idx itemUpdate) = putStrLn $ "Update: idx=" ++ show idx ++ " itemUpdate=" ++ show itemUpdate
 run dataPath (Remove idx) = putStrLn $ "Remove: idx=" ++ show idx
 
 writeToDoList :: FilePath -> ToDoList -> IO ()
 writeToDoList dataPath toDoList = BS.writeFile dataPath (Yaml.encode toDoList)
+
+showItem :: ItemIndex -> Item -> IO ()
+showItem idx (Item title mbDescription mbPriority mbDueBy) = do
+    putStrLn $ "[" ++ show idx ++ "]: " ++ title
+    putStr "  Description: "
+    putStrLn $ showField id mbDescription
+    putStr "  Priority: "
+    putStrLn $ showField show mbPriority
+    putStr "  Due by: "
+    putStrLn $ showField (formatTime defaultTimeLocale "%Y/%m/%d %H:%M:%S") mbDueBy
+
+showField :: (a -> String) -> Maybe a -> String
+showField f (Just x) = f x
+showField _ Nothing = "(not set)"
+
+viewItem :: FilePath -> ItemIndex -> IO ()
+viewItem dataPath idx = do
+  ToDoList items <- readToDoList dataPath
+  let mbItem = items !! idx
+  case mbItem of
+    Nothing -> putStrLn "Invalid item index"
+    Just item -> showItem idx item
 
 readToDoList :: FilePath -> IO ToDoList
 readToDoList dataPath = do

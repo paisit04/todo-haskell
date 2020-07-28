@@ -3,7 +3,14 @@
 # For more information, please see the documentation at:
 #   https://docs.haskellstack.org/en/stable/lock_files
 
-packages: []
+packages:
+- completed:
+    hackage: listsafe-0.1.0.1@sha256:066b02e56926b5bbdb68dec7e2f3b84c62c91898246abed3eb08006d94a41338,1111
+    pantry-tree:
+      size: 215
+      sha256: 2ba330ac09df2c78c7aef08a32373c2fbe57789ddbc4ee0c1d82bb9f9a62a327
+  original:
+    hackage: listsafe-0.1.0.1
 snapshots:
 - completed:
     size: 531718
