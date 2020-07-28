@@ -198,10 +198,20 @@ run dataPath List = putStrLn "List"
 run dataPath (Add item) = addItem dataPath item
 run dataPath (View idx) = viewItem dataPath idx
 run dataPath (Update idx itemUpdate) = putStrLn $ "Update: idx=" ++ show idx ++ " itemUpdate=" ++ show itemUpdate
-run dataPath (Remove idx) = putStrLn $ "Remove: idx=" ++ show idx
+run dataPath (Remove idx) = removeItem dataPath idx
 
 writeToDoList :: FilePath -> ToDoList -> IO ()
 writeToDoList dataPath toDoList = BS.writeFile dataPath (Yaml.encode toDoList)
+
+removeAt :: [a] -> Int -> Maybe [a]
+removeAt xs idx =
+  if idx < 0 || idx >= length xs
+  then Nothing
+  else
+    let (before, after) = splitAt idx xs
+        _ : after' = after
+        xs' = before ++ after'
+    in Just xs'
 
 showItem :: ItemIndex -> Item -> IO ()
 showItem idx (Item title mbDescription mbPriority mbDueBy) = do
@@ -230,6 +240,16 @@ viewItem dataPath idx = do
   case mbItem of
     Nothing -> putStrLn "Invalid item index"
     Just item -> showItem idx item
+
+removeItem :: FilePath -> ItemIndex -> IO ()
+removeItem dataPath idx = do
+  ToDoList items <- readToDoList dataPath
+  let mbItems = items `removeAt` idx
+  case mbItems of
+    Nothing -> putStrLn "Invalid item index"
+    Just items' -> do
+      let toDoList = ToDoList items'
+      writeToDoList dataPath toDoList
 
 readToDoList :: FilePath -> IO ToDoList
 readToDoList dataPath = do
