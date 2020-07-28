@@ -193,7 +193,7 @@ main = do
   -- print toDoList
 
 run :: FilePath -> Command -> IO ()
-run dataPath Info = putStrLn "Info"
+run dataPath Info = showInfo dataPath
 run dataPath Init = putStrLn "Init"
 run dataPath List = viewItems dataPath
 run dataPath (Add item) = addItem dataPath item
@@ -244,6 +244,19 @@ viewItems dataPath = do
   forM_
     (zip [0..] items)
     (\(idx, item) -> showItem idx item)
+
+showInfo :: FilePath -> IO ()
+showInfo dataPath = do
+  putStrLn $ "Data file path: " ++ dataPath
+  exists <- doesFileExist dataPath
+  if exists
+  then do
+      s <- BS.readFile dataPath
+      let mbToDoList = Yaml.decodeThrow s
+      case mbToDoList of
+          Nothing -> putStrLn $ "Status: file is invalid"
+          Just (ToDoList items) -> putStrLn $ "Status: contains " ++ show (length items) ++ " items"
+  else putStrLn $ "Status: file does not exist"
 
 addItem :: FilePath -> Item -> IO ()
 addItem dataPath item = do
